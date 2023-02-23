@@ -20,45 +20,30 @@ import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.stream.Collectors;
 
-/**
- * Complex inline sharding algorithm.
- */
 public final class ComplexInlineJavascriptShardingAlgorithm implements ComplexKeysShardingAlgorithm<Comparable<?>> {
-    
+
     private static final String ALGORITHM_EXPRESSION_KEY = "algorithm-expression";
-    
+
     private static final String SHARING_COLUMNS_KEY = "sharding-columns";
-    
+
     private static final String ALLOW_RANGE_QUERY_KEY = "allow-range-query-with-inline-sharding";
-    
+
     private String algorithmExpression;
-    
+
     private Collection<String> shardingColumns;
-    
+
     private boolean allowRangeQuery;
-    
+
     @Override
     public void init(final Properties props) {
-        algorithmExpression = getAlgorithmExpression(props);
-        shardingColumns = getShardingColumns(props);
-        allowRangeQuery = getAllowRangeQuery(props);
-    }
-    
-    private String getAlgorithmExpression(final Properties props) {
         String algorithmExpression = props.getProperty(ALGORITHM_EXPRESSION_KEY);
         ShardingSpherePreconditions.checkNotNull(algorithmExpression, () -> new ShardingAlgorithmInitializationException(getType(), "Inline sharding algorithm expression can not be null."));
-        return InlineExpressionParser.handlePlaceHolder(algorithmExpression.trim());
-    }
-    
-    private Collection<String> getShardingColumns(final Properties props) {
+        this.algorithmExpression = InlineExpressionParser.handlePlaceHolder(algorithmExpression.trim());
         String shardingColumns = props.getProperty(SHARING_COLUMNS_KEY, "");
-        return shardingColumns.isEmpty() ? Collections.emptyList() : Arrays.asList(shardingColumns.split(","));
+        this.shardingColumns = shardingColumns.isEmpty() ? Collections.emptyList() : Arrays.asList(shardingColumns.split(","));
+        allowRangeQuery = Boolean.parseBoolean(props.getOrDefault(ALLOW_RANGE_QUERY_KEY, Boolean.FALSE.toString()).toString());
     }
-    
-    private boolean getAllowRangeQuery(final Properties props) {
-        return Boolean.parseBoolean(props.getOrDefault(ALLOW_RANGE_QUERY_KEY, Boolean.FALSE.toString()).toString());
-    }
-    
+
     @Override
     public Collection<String> doSharding(final Collection<String> availableTargetNames, final ComplexKeysShardingValue<Comparable<?>> shardingValue) {
         if (!shardingValue.getColumnNameAndRangeValuesMap().isEmpty()) {
@@ -69,32 +54,19 @@ public final class ComplexInlineJavascriptShardingAlgorithm implements ComplexKe
         Map<String, Collection<Comparable<?>>> columnNameAndShardingValuesMap = shardingValue.getColumnNameAndShardingValuesMap();
         ShardingSpherePreconditions.checkState(shardingColumns.isEmpty() || shardingColumns.size() == columnNameAndShardingValuesMap.size(),
                 () -> new MismatchedComplexInlineShardingAlgorithmColumnAndValueSizeException(shardingColumns.size(), columnNameAndShardingValuesMap.size()));
-        Collection<Map<String, Comparable<?>>> combine = combine(columnNameAndShardingValuesMap);
-        return combine.stream().map(this::doSharding).collect(Collectors.toList());
-    }
-    
-    private String doSharding(final Map<String, Comparable<?>> shardingValues) {
-        Closure<?> closure = createClosure();
-        for (Entry<String, Comparable<?>> entry : shardingValues.entrySet()) {
-            closure.setProperty(entry.getKey(), entry.getValue());
-        }
-        return closure.call().toString();
-    }
-    
-    private static <K, V> Collection<Map<K, V>> combine(final Map<K, Collection<V>> map) {
-        Collection<Map<K, V>> result = new LinkedList<>();
-        for (Entry<K, Collection<V>> entry : map.entrySet()) {
+        Collection<Map<String, Comparable<?>>> result = new LinkedList<>();
+        for (Entry<String, Collection<Comparable<?>>> entry : columnNameAndShardingValuesMap.entrySet()) {
             if (result.isEmpty()) {
-                for (V value : entry.getValue()) {
-                    Map<K, V> item = new HashMap<>();
+                for (Comparable<?> value : entry.getValue()) {
+                    Map<String, Comparable<?>> item = new HashMap<>();
                     item.put(entry.getKey(), value);
                     result.add(item);
                 }
             } else {
-                Collection<Map<K, V>> list = new LinkedList<>();
-                for (Map<K, V> loop : result) {
-                    for (V value : entry.getValue()) {
-                        Map<K, V> item = new HashMap<>();
+                Collection<Map<String, Comparable<?>>> list = new LinkedList<>();
+                for (Map<String, Comparable<?>> loop : result) {
+                    for (Comparable<?> value : entry.getValue()) {
+                        Map<String, Comparable<?>> item = new HashMap<>();
                         item.put(entry.getKey(), value);
                         item.putAll(loop);
                         list.add(item);
@@ -103,15 +75,17 @@ public final class ComplexInlineJavascriptShardingAlgorithm implements ComplexKe
                 result = list;
             }
         }
-        return result;
+        Collection<Map<String, Comparable<?>>> combine = result;
+        return combine.stream().map(shardingValues -> {
+            Closure<?> closure = new InlineExpressionParser(algorithmExpression).evaluateClosure().rehydrate(new Expando(), null, null);
+            closure.setResolveStrategy(Closure.DELEGATE_ONLY);
+            for (Entry<String, Comparable<?>> entry : shardingValues.entrySet()) {
+                closure.setProperty(entry.getKey(), entry.getValue());
+            }
+            return closure.call().toString();
+        }).collect(Collectors.toList());
     }
-    
-    private Closure<?> createClosure() {
-        Closure<?> result = new InlineExpressionParser(algorithmExpression).evaluateClosure().rehydrate(new Expando(), null, null);
-        result.setResolveStrategy(Closure.DELEGATE_ONLY);
-        return result;
-    }
-    
+
     @Override
     public String getType() {
         return "COMPLEX_INLINE";
