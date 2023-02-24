@@ -1,0 +1,47 @@
+mode:
+  type: Cluster
+  repository:
+    type: ZooKeeper
+    props:
+      namespace: governance_ds
+      server-lists: first.zookeeper.com:2181
+      retryIntervalMilliseconds: 500
+      timeToLiveSeconds: 60
+      maxRetries: 3
+      operationTimeoutMilliseconds: 500
+
+authority:
+  users:
+    - user: root@%
+      password: root
+    - user: sharding
+      password: sharding
+  privilege:
+    type: ALL_PERMITTED
+
+transaction:
+  defaultType: XA
+  providerType: Atomikos
+
+sqlParser:
+  sqlCommentParseEnabled: false
+  sqlStatementCache:
+    initialCapacity: 2000
+    maximumSize: 65535
+  parseTreeCache:
+    initialCapacity: 128
+    maximumSize: 1024
+
+logging:
+  loggers:
+  - loggerName: ShardingSphere-SQL
+    additivity: true
+    level: INFO
+    props:
+      enable: false
+
+props:
+  system-log-level: INFO # TODO lingh: what?
+  kernel-executor-size: 16  # Infinite by default.
+  proxy-mysql-default-version: 8.0.31 # In the absence of schema name, the default version will be used.
+  cdc-server-port: 33071 # CDC server port

@@ -1,0 +1,42 @@
+version: "3.8"
+
+services:
+  apache-shardingsphere-proxy-native:
+    image: apache/shardingsphere-proxy-native:latest
+    hostname: shardingsphere-proxy-native.apache.com
+    volumes:
+      - ./custom/conf:/opt/shardingsphere-proxy-native/conf
+    ports:
+      - "3307:3307"
+  mysql-first:
+    image: mysql:8.0.31-oracle
+    hostname: first.mysql.com
+    command: --default-authentication-plugin=mysql_native_password
+    restart: always
+    ports:
+      - "13306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: example
+      MYSQL_DATABASE: t-order-first
+      MYSQL_USER: systemAdministratorFirst
+      MYSQL_PASSWORD: systemAdministratorFirst
+  mysql-second:
+    image: mysql:8.0.31-oracle
+    hostname: second.mysql.com
+    command: --default-authentication-plugin=mysql_native_password
+    restart: always
+    ports:
+      - "13307:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: example
+      MYSQL_DATABASE: t-order-second
+      MYSQL_USER: systemAdministratorSecond
+      MYSQL_PASSWORD: systemAdministratorSecond
+  zookeeper-first:
+    image: zookeeper:3.8.1-temurin
+    restart: always
+    hostname: first.zookeeper.com
+    ports:
+      - "12181:2181"
+    environment:
+      JVMFLAGS: "-Xmx1024m"
